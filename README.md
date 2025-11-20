@@ -1,0 +1,1 @@
+Future Mirror — full project with local assets. Replace placeholder images in assets/ with higher-quality artwork if desired.
