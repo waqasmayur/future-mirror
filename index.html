@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Future Mirror — Hologram Lab</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+</head>
+<body>
+<div class="app" id="app">
+  <!-- Camera Panel -->
+  <div class="cam-panel">
+    <div class="title">Future Mirror — Hologram Lab</div>
+    <video id="input_video" autoplay playsinline muted></video>
+    <canvas id="overlay"></canvas>
+    <div class="holo-frame"></div>
+    <div class="scan-line"></div>
+    <div class="controls">
+      <button id="startBtn">Start Camera</button>
+      <button id="stopBtn">Stop</button>
+      <button id="saveBtn">Save HoloShot</button>
+    </div>
+  </div>
+  <!-- Right Controls Panel -->
+  <div class="controls">
+    <!-- Tool selection -->
+    <div class="chip" data-tool="glasses">Glasses</div>
+    <div class="chip" data-tool="makeup">Makeup</div>
+    <div class="chip" data-tool="bg">Backgrounds</div>
+    <div class="chip" data-tool="none">None</div>
+    <!-- Background selection -->
+    <div class="chip" data-bg="car">Inside Car</div>
+    <div class="chip" data-bg="city">Neon City</div>
+    <div class="chip" data-bg="lab">Hologram Lab</div>
+  </div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

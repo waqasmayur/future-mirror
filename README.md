@@ -1,1 +1,1 @@
-# future-mirror
+Follow deployment instructions: serve locally for camera test, deploy to Netlify/GitHub Pages/Vercel for PWA and APK generation. Replace icons in /icons folder for installable app.
