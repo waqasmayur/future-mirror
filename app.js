@@ -1,10 +1,11 @@
 document.addEventListener("DOMContentLoaded", () => {
-    console.log("DOM fully loaded");
+    console.log("Future Mirror Loaded");
 
     const startBtn = document.getElementById("startBtn");
     const stopBtn = document.getElementById("stopBtn");
     const saveBtn = document.getElementById("saveBtn");
 
+    // FIXED: match IDs exactly from your HTML
     const video = document.getElementById("input_video");
     const canvas = document.getElementById("overlay");
 
@@ -15,7 +16,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     const ctx = canvas.getContext("2d");
-
     console.log("Canvas loaded, context OK");
 
     startBtn.addEventListener("click", () => {
