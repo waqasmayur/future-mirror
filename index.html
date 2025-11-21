@@ -18,8 +18,13 @@
       <div class="badge">Alpha Prototype</div>
     </div>
     <div class="camera-wrap" id="cameraWrap">
-      <video id="input_video" autoplay playsinline muted></video>
-      <canvas id="overlay"></canvas>
+
+      <!-- FIX #2: videoElement ID -->
+      <video id="videoElement" autoplay playsinline muted></video>
+
+      <!-- FIX #1: Give canvas size -->
+      <canvas id="overlay" width="640" height="480"></canvas>
+
       <div class="holo-frame"></div>
       <div class="scan-line"></div>
     </div>
