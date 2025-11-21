@@ -9,6 +9,7 @@
 </head>
 <body>
 <div class="app" id="app">
+
   <div class="cam-panel">
     <div style="display:flex;justify-content:space-between;align-items:center;">
       <div>
@@ -17,34 +18,40 @@
       </div>
       <div class="badge">Alpha Prototype</div>
     </div>
+
+    <!-- Image upload / live camera -->
+    <div style="margin:12px 0;">
+      <input type="file" id="uploadImage" accept="image/*">
+    </div>
+
     <div class="camera-wrap" id="cameraWrap">
-
-      <!-- FIX #2: videoElement ID -->
-      <video id="videoElement" autoplay playsinline muted></video>
-
-      <!-- FIX #1: Give canvas size -->
+      <video id="input_video" autoplay playsinline muted style="display:none;"></video>
       <canvas id="overlay" width="640" height="480"></canvas>
-
       <div class="holo-frame"></div>
       <div class="scan-line"></div>
     </div>
+
     <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
       <div class="toolbar">
         <button class="btn neon" id="startBtn">Start Camera</button>
-        <button class="btn" id="stopBtn">Stop</button>
+        <button class="btn" id="stopBtn">Stop Camera</button>
         <button class="btn save-btn" id="saveBtn">Save HoloShot</button>
+        <button class="btn" id="downloadBtn" style="display:none;">Download</button>
       </div>
-      <div style="margin-left:auto" class="muted">Tip: grant camera permission</div>
+      <div style="margin-left:auto" class="muted">Tip: upload image or grant camera permission</div>
     </div>
   </div>
+
   <div class="controls">
     <div class="section-title">TRY-ON TOOLS</div>
+
     <div class="control-row">
       <div class="chip active" data-tool="glasses" id="chip-glasses">Glasses</div>
       <div class="chip" data-tool="makeup" id="chip-makeup">Makeup</div>
       <div class="chip" data-tool="bg" id="chip-bg">Backgrounds</div>
       <div class="chip" data-tool="none" id="chip-none">None</div>
     </div>
+
     <div style="margin-top:8px;">
       <div class="muted">Glasses styles</div>
       <div class="control-row" id="glassesList">
@@ -53,7 +60,9 @@
         <div class="chip" data-style="round">Round Neon</div>
       </div>
     </div>
+
     <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77,transparent);margin:12px 0;border-radius:6px" />
+
     <div>
       <div class="muted">Makeup presets</div>
       <div class="control-row" id="makeupList">
@@ -62,7 +71,9 @@
         <div class="chip" data-makeup="glow">Hologram Glow</div>
       </div>
     </div>
+
     <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77,transparent);margin:12px 0;border-radius:6px" />
+
     <div>
       <div class="muted">Backgrounds</div>
       <div class="control-row" id="bgList">
@@ -71,17 +82,15 @@
         <div class="chip" data-bg="city">Neon City</div>
         <div class="chip" data-bg="lab">Hologram Lab</div>
       </div>
-      <div style="margin-top:10px" class="muted">(backgrounds are composited under the live video)</div>
+      <div style="margin-top:10px" class="muted">(backgrounds are composited under the image/video)</div>
     </div>
-    <div style="display:flex;gap:8px;margin-top:8px">
-      <button class="btn neon" id="downloadBtn">Download Image</button>
-      <button class="btn" id="shareBtn">Share (if supported)</button>
-    </div>
+
     <div class="footer">
       Built for <strong>Future Mirror</strong> — Hologram Lab. Local processing — we don't upload your images.
     </div>
   </div>
 </div>
+
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
