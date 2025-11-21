@@ -1,100 +1,116 @@
-<div class="controls">
-  <div class="section-title">TRY-ON TOOLS</div>
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Future Mirror — Hologram Lab</title>
+<link rel="stylesheet" href="style.css">
+<link rel="manifest" href="manifest.json">
+</head>
 
-  <!-- Tool Category Selection -->
-  <div class="control-row">
-    <div class="chip active" data-makeup="lipstick-red">Lipstick</div>
-    <div class="chip" data-style="glasses-black">Glasses</div>
-    <div class="chip" data-jewelry="earring-gold">Jewelry</div>
-    <div class="chip" data-tool="none">None</div>
-  </div>
+<body>
+<div class="app" id="app">
 
-  <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77,transparent);margin:12px 0;border-radius:6px" />
-
-  <!-- Makeup Category -->
-  <div>
-    <div class="muted">Lipstick Colors</div>
-    <div class="control-row">
-      <div class="chip" data-makeup="lipstick-red">Red</div>
-      <div class="chip" data-makeup="lipstick-pink">Pink</div>
-      <div class="chip" data-makeup="lipstick-nude">Nude</div>
-      <div class="chip" data-makeup="lipstick-brown">Brown</div>
-      <div class="chip" data-makeup="lipstick-orange">Orange</div>
+  <div class="cam-panel">
+    <div style="display:flex;justify-content:space-between;align-items:center;">
+      <div>
+        <div class="title">
+          <span class="neon">Future Mirror</span>
+          <span style="font-size:12px;color:#bfa3ff">Hologram Lab</span>
+        </div>
+        <div class="subtitle">Try-on makeup, jewelry, glasses — place items exactly where you click.</div>
+      </div>
+      <div class="badge">Alpha Prototype</div>
     </div>
 
-    <div class="muted" style="margin-top:8px">Eyeliner</div>
-    <div class="control-row">
-      <div class="chip" data-makeup="eyeliner-black">Black</div>
-      <div class="chip" data-makeup="eyeliner-blue">Blue</div>
-      <div class="chip" data-makeup="eyeliner-brown">Brown</div>
+    <!-- Upload -->
+    <div style="margin:12px 0;">
+      <input type="file" id="uploadImage" accept="image/*">
     </div>
 
-    <div class="muted" style="margin-top:8px">Blush</div>
-    <div class="control-row">
-      <div class="chip" data-makeup="blush-softpink">Soft Pink</div>
-      <div class="chip" data-makeup="blush-rose">Rose</div>
-      <div class="chip" data-makeup="blush-peach">Peach</div>
+    <!-- Canvas -->
+    <div class="camera-wrap" id="cameraWrap">
+      <video id="input_video" autoplay playsinline muted style="display:none;"></video>
+      <canvas id="overlay" width="640" height="480"></canvas>
+      <div class="holo-frame"></div>
+      <div class="scan-line"></div>
     </div>
 
-    <div class="muted" style="margin-top:8px">Eyeshadow</div>
-    <div class="control-row">
-      <div class="chip" data-makeup="eyeshadow-gold">Gold</div>
-      <div class="chip" data-makeup="eyeshadow-purple">Purple</div>
-      <div class="chip" data-makeup="eyeshadow-smokey">Smokey</div>
-    </div>
-
-    <div class="muted" style="margin-top:8px">Mascara</div>
-    <div class="control-row">
-      <div class="chip" data-makeup="mascara-black">Black</div>
-      <div class="chip" data-makeup="mascara-brown">Brown</div>
+    <!-- Buttons -->
+    <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
+      <div class="toolbar">
+        <button class="btn neon" id="startBtn">Start Camera</button>
+        <button class="btn" id="stopBtn">Stop Camera</button>
+        <button class="btn save-btn" id="saveBtn">Save HoloShot</button>
+        <button class="btn" id="downloadBtn" style="display:none;">Download</button>
+      </div>
+      <div style="margin-left:auto" class="muted">Tip: upload a photo or start camera</div>
     </div>
   </div>
 
-  <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77,transparent);margin:12px 0;border-radius:6px" />
 
-  <!-- Glasses Category -->
-  <div>
-    <div class="muted">Glasses Styles</div>
+  <!-- ==================== CONTROLS PANEL ==================== -->
+  <div class="controls">
+
+    <div class="section-title">TOOLS</div>
+
+    <!-- Main Categories -->
     <div class="control-row">
-      <div class="chip" data-style="glasses-black">Black</div>
-      <div class="chip" data-style="glasses-gold">Gold</div>
-      <div class="chip" data-style="glasses-round">Round</div>
-    </div>
-  </div>
-
-  <hr style="border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77,transparent);margin:12px 0;border-radius:6px" />
-
-  <!-- Jewelry Category -->
-  <div>
-    <div class="muted">Ear Jewelry</div>
-    <div class="control-row">
-      <div class="chip" data-jewelry="earring-gold">Gold</div>
-      <div class="chip" data-jewelry="earring-diamond">Diamond</div>
-      <div class="chip" data-jewelry="earring-hoop">Hoop</div>
+      <div class="chip active" data-tool="makeup">Makeup</div>
+      <div class="chip" data-tool="jewelry">Jewelry</div>
+      <div class="chip" data-tool="glasses">Glasses</div>
+      <div class="chip" data-tool="none">None</div>
     </div>
 
-    <div class="muted" style="margin-top:8px">Nose Jewelry</div>
-    <div class="control-row">
-      <div class="chip" data-jewelry="nosepin-gold">Gold Nosepin</div>
-      <div class="chip" data-jewelry="nosepin-diamond">Diamond Nosepin</div>
+
+    <!-- ==================== MAKEUP ==================== -->
+    <div id="makeup-tools" style="margin-top:15px;">
+      <div class="muted">Makeup Tools</div>
+
+      <div class="control-row">
+        <div class="chip" data-makeup="lip-red">Lipstick: Red</div>
+        <div class="chip" data-makeup="lip-pink">Lipstick: Pink</div>
+        <div class="chip" data-makeup="eyeliner-black">Eyeliner: Black</div>
+        <div class="chip" data-makeup="blush-rose">Blush: Rose</div>
+      </div>
     </div>
 
-    <div class="muted" style="margin-top:8px">Neck Jewelry</div>
-    <div class="control-row">
-      <div class="chip" data-jewelry="necklace-gold">Gold Necklace</div>
-      <div class="chip" data-jewelry="necklace-pearl">Pearl Necklace</div>
-      <div class="chip" data-jewelry="necklace-diamond">Diamond Necklace</div>
+
+    <!-- ==================== JEWELRY ==================== -->
+    <div id="jewelry-tools" style="margin-top:15px; display:none;">
+      <div class="muted">Jewelry</div>
+
+      <div class="control-row">
+        <div class="chip" data-jewelry="earring-gold">Gold Earrings</div>
+        <div class="chip" data-jewelry="earring-silver">Silver Earrings</div>
+        <div class="chip" data-jewelry="nose-ring">Nose Ring</div>
+        <div class="chip" data-jewelry="necklace-pearl">Pearl Necklace</div>
+      </div>
     </div>
 
-    <div class="muted" style="margin-top:8px">Rings</div>
-    <div class="control-row">
-      <div class="chip" data-jewelry="ring-gold">Gold Ring</div>
-      <div class="chip" data-jewelry="ring-diamond">Diamond Ring</div>
-      <div class="chip" data-jewelry="ring-rose">Rose Ring</div>
-    </div>
-  </div>
 
-  <div class="footer">
-    Built for <strong>Future Mirror</strong> — Hologram Lab. Local processing — we don't upload your images.
+    <!-- ==================== GLASSES ==================== -->
+    <div id="glasses-tools" style="margin-top:15px; display:none;">
+      <div class="muted">Glasses</div>
+
+      <div class="control-row">
+        <div class="chip" data-style="glasses-black">Black Glasses</div>
+        <div class="chip" data-style="glasses-round">Round Glasses</div>
+        <div class="chip" data-style="glasses-aviator">Aviator</div>
+      </div>
+    </div>
+
+
+    <div class="footer">
+      Built for <strong>Future Mirror</strong> — Hologram Lab. Local processing — we don't upload your images.
+    </div>
   </div>
 </div>
+
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
+<script src="app.js"></script>
+
+</body>
+</html>
