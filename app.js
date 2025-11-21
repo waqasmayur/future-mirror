@@ -13,14 +13,15 @@ document.addEventListener("DOMContentLoaded", () => {
   const video = document.getElementById("input_video");
 
   let uploadedImage = null;
-  let currentTool = null; // e.g., "lipstick-red", "glasses-black"
-  let currentCategory = null; // "makeup", "glasses", "jewelry"
-  const appliedItems = []; // store all applied items
+  let currentTool = null;
+  let currentCategory = null;
+  const appliedItems = [];
 
   // ======== IMAGE UPLOAD ========
   uploadInput.addEventListener("change", (e) => {
     const file = e.target.files[0];
     if (!file) return;
+
     const img = new Image();
     img.onload = () => {
       uploadedImage = img;
@@ -35,6 +36,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
       video.style.display = "block";
+
       uploadedImage = null;
       redrawCanvas();
     } catch (err) {
@@ -53,20 +55,24 @@ document.addEventListener("DOMContentLoaded", () => {
   function redrawCanvas() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw uploaded image or live video
     if (uploadedImage) {
       ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
     } else if (video.srcObject) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     }
 
-    // Draw all applied items
     appliedItems.forEach(item => {
       const img = new Image();
-      img.src = item.src;
       img.onload = () => {
-        ctx.drawImage(img, item.x - img.width / 2, item.y - img.height / 2, img.width, img.height);
+        ctx.drawImage(
+          img,
+          item.x - item.w / 2,
+          item.y - item.h / 2,
+          item.w,
+          item.h
+        );
       };
+      img.src = item.src;
     });
   }
 
@@ -79,28 +85,43 @@ document.addEventListener("DOMContentLoaded", () => {
     const y = e.clientY - rect.top;
 
     const srcPath = `assets/${currentCategory}/${currentTool}.png`;
-    appliedItems.push({ src: srcPath, x, y });
-    redrawCanvas();
+
+    // Preload to store correct width/height
+    const img = new Image();
+    img.onload = () => {
+      appliedItems.push({
+        src: srcPath,
+        x,
+        y,
+        w: img.width,
+        h: img.height
+      });
+      redrawCanvas();
+    };
+    img.src = srcPath;
   });
 
-  // ======== CHIP INTERACTIVITY ========
+  // ======== CHIP SELECTION ========
   const chips = document.querySelectorAll(".chip");
+
   chips.forEach(chip => {
     chip.addEventListener("click", () => {
-      chip.parentElement.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
+      chip.parentElement
+        .querySelectorAll(".chip")
+        .forEach(c => c.classList.remove("active"));
+
       chip.classList.add("active");
 
-      if (chip.dataset.tool) {
-        currentTool = chip.dataset.tool;
-        currentCategory = "makeup"; // default category
-        if (chip.dataset.makeup) currentCategory = "makeup";
-        if (chip.dataset.style) currentCategory = "glasses";
-        if (chip.dataset.jewelry) currentCategory = "jewelry";
-      }
+      currentTool = chip.dataset.tool || null;
 
-      // Change cursor to small preview
-      if (currentTool) {
-        canvas.style.cursor = `url(assets/${currentCategory}/${currentTool}.png) 16 16, auto`;
+      if (chip.dataset.makeup) currentCategory = "makeup";
+      else if (chip.dataset.style) currentCategory = "glasses";
+      else if (chip.dataset.jewelry) currentCategory = "jewelry";
+
+      // Update cursor preview
+      if (currentTool && currentCategory) {
+        canvas.style.cursor =
+          `url(assets/${currentCategory}/${currentTool}.png) 16 16, auto`;
       } else {
         canvas.style.cursor = "default";
       }
