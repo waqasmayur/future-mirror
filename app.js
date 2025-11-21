@@ -19,7 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let currentBg = "car";
 
   // ======== MEDIA PIPE FACE MESH ========
-  const faceMesh = new FaceMesh.FaceMesh({
+  // UPDATED: Use correct constructor
+  const faceMesh = new FaceMesh({
     locateFile: (file) =>
       `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
   });
@@ -43,7 +44,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const bgImg = new Image();
       bgImg.src = `assets/backgrounds/${currentBg}.png`;
       bgImg.onload = () => {
-        ctx.globalAlpha = 0.3; // make hologram effect
+        ctx.globalAlpha = 0.3; // hologram effect
         ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
         ctx.globalAlpha = 1.0;
       };
@@ -53,7 +54,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
       const landmarks = results.multiFaceLandmarks[0];
 
-      // Example: draw glasses
+      // Glasses overlay
       if (currentTool === "glasses") {
         const leftEye = landmarks[33];
         const rightEye = landmarks[263];
@@ -68,9 +69,10 @@ document.addEventListener("DOMContentLoaded", () => {
         };
       }
 
-      // Example: draw makeup (simple neon blush on cheeks)
+      // Makeup overlay
       if (currentTool === "makeup") {
-        ctx.fillStyle = currentMakeup === "bold" ? "rgba(255,0,255,0.4)" : "rgba(128,0,255,0.3)";
+        ctx.fillStyle =
+          currentMakeup === "bold" ? "rgba(255,0,255,0.4)" : "rgba(128,0,255,0.3)";
         const leftCheek = landmarks[234];
         const rightCheek = landmarks[454];
         ctx.beginPath();
