@@ -1,25 +1,26 @@
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Future Mirror Loaded");
 
-  // ======== ELEMENTS ========
+  const uploadInput = document.getElementById("uploadImage");
+  const canvas = document.getElementById("overlay");
+  const ctx = canvas.getContext("2d");
+
   const startBtn = document.getElementById("startBtn");
   const stopBtn = document.getElementById("stopBtn");
   const saveBtn = document.getElementById("saveBtn");
   const downloadBtn = document.getElementById("downloadBtn");
 
   const video = document.getElementById("input_video");
-  const canvas = document.getElementById("overlay");
-  const ctx = canvas.getContext("2d");
 
-  // ======== STATE ========
+  let uploadedImage = null;
   let mpCamera = null;
-  let currentTool = "glasses"; // default tool
-  let currentStyle = "neon";
+
+  let currentTool = "glasses";
+  let currentGlasses = "neon";
   let currentMakeup = "bold";
   let currentBg = "car";
 
-  // ======== MEDIA PIPE FACE MESH ========
-  // UPDATED: Use correct constructor
+  // ======== FACE MESH ========
   const faceMesh = new FaceMesh({
     locateFile: (file) =>
       `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${file}`
@@ -33,117 +34,128 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   faceMesh.onResults((results) => {
-    // Clear canvas
+    drawCanvas(results.multiFaceLandmarks ? results.multiFaceLandmarks[0] : null);
+  });
+
+  // ======== DRAW CANVAS ========
+  function drawCanvas(landmarks = null) {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // Draw camera background
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    // Draw uploaded image or live video
+    if (uploadedImage) {
+      ctx.drawImage(uploadedImage, 0, 0, canvas.width, canvas.height);
+    } else {
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+    }
 
-    // Overlay selected background if any
+    // Background overlay
     if (currentBg !== "none") {
       const bgImg = new Image();
       bgImg.src = `assets/backgrounds/${currentBg}.png`;
       bgImg.onload = () => {
-        ctx.globalAlpha = 0.3; // hologram effect
+        ctx.globalAlpha = 0.3;
         ctx.drawImage(bgImg, 0, 0, canvas.width, canvas.height);
         ctx.globalAlpha = 1.0;
       };
     }
 
-    // Draw overlays if landmarks detected
-    if (results.multiFaceLandmarks && results.multiFaceLandmarks.length > 0) {
-      const landmarks = results.multiFaceLandmarks[0];
+    // Glasses overlay
+    if (currentTool === "glasses" && landmarks) {
+      const leftEye = landmarks[33];
+      const rightEye = landmarks[263];
+      const glassesWidth = (rightEye.x - leftEye.x) * canvas.width * 2;
 
-      // Glasses overlay
-      if (currentTool === "glasses") {
-        const leftEye = landmarks[33];
-        const rightEye = landmarks[263];
-        const glassesWidth = (rightEye.x - leftEye.x) * canvas.width * 2;
-
-        const glassesImg = new Image();
-        glassesImg.src = `assets/glasses/${currentStyle}.png`;
-        glassesImg.onload = () => {
-          const x = leftEye.x * canvas.width - glassesWidth * 0.25;
-          const y = leftEye.y * canvas.height - glassesWidth * 0.25;
-          ctx.drawImage(glassesImg, x, y, glassesWidth, glassesWidth / 2);
-        };
-      }
-
-      // Makeup overlay
-      if (currentTool === "makeup") {
-        ctx.fillStyle =
-          currentMakeup === "bold" ? "rgba(255,0,255,0.4)" : "rgba(128,0,255,0.3)";
-        const leftCheek = landmarks[234];
-        const rightCheek = landmarks[454];
-        ctx.beginPath();
-        ctx.arc(leftCheek.x * canvas.width, leftCheek.y * canvas.height, 20, 0, 2 * Math.PI);
-        ctx.fill();
-        ctx.beginPath();
-        ctx.arc(rightCheek.x * canvas.width, rightCheek.y * canvas.height, 20, 0, 2 * Math.PI);
-        ctx.fill();
-      }
+      const glassesImg = new Image();
+      glassesImg.src = `assets/glasses/${currentGlasses}.png`;
+      glassesImg.onload = () => {
+        const x = leftEye.x * canvas.width - glassesWidth * 0.25;
+        const y = leftEye.y * canvas.height - glassesWidth * 0.25;
+        ctx.drawImage(glassesImg, x, y, glassesWidth, glassesWidth / 2);
+      };
     }
+
+    // Makeup overlay
+    if (currentTool === "makeup" && landmarks) {
+      ctx.fillStyle =
+        currentMakeup === "bold" ? "rgba(255,0,255,0.4)" : "rgba(128,0,255,0.3)";
+      const leftCheek = landmarks ? landmarks[234] : { x: 0.3, y: 0.5 };
+      const rightCheek = landmarks ? landmarks[454] : { x: 0.7, y: 0.5 };
+
+      ctx.beginPath();
+      ctx.arc(leftCheek.x * canvas.width, leftCheek.y * canvas.height, 30, 0, 2 * Math.PI);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(rightCheek.x * canvas.width, rightCheek.y * canvas.height, 30, 0, 2 * Math.PI);
+      ctx.fill();
+    }
+  }
+
+  // ======== IMAGE UPLOAD ========
+  uploadInput.addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const img = new Image();
+    img.onload = () => {
+      uploadedImage = img;
+      drawCanvas();
+    };
+    img.src = URL.createObjectURL(file);
   });
 
-  // ======== CAMERA CONTROL ========
+  // ======== CAMERA ========
   startBtn.addEventListener("click", async () => {
-    console.log("Start clicked");
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       video.srcObject = stream;
-      await video.play();
+      video.style.display = "block";
+      uploadedImage = null;
 
       mpCamera = new Camera.Camera(video, {
-        onFrame: async () => {
-          await faceMesh.send({ image: video });
-        },
+        onFrame: async () => await faceMesh.send({ image: video }),
         width: 640,
         height: 480
       });
       mpCamera.start();
-    } catch (error) {
-      console.error("Camera Error:", error);
-      alert("Camera permission required!");
+    } catch (err) {
+      console.error("Camera Error:", err);
+      alert("Camera not found or permission denied");
     }
   });
 
   stopBtn.addEventListener("click", () => {
-    console.log("Stop clicked");
     if (mpCamera) mpCamera.stop();
   });
 
   // ======== SAVE / DOWNLOAD ========
-  saveBtn.addEventListener("click", () => {
-    console.log("Save clicked");
-    downloadBtn.click();
-  });
+  saveBtn.addEventListener("click", () => downloadBtn.click());
 
   downloadBtn.addEventListener("click", () => {
     const link = document.createElement("a");
-    link.download = "holo_snapshot.png";
+    link.download = "future_mirror.png";
     link.href = canvas.toDataURL("image/png");
     link.click();
   });
 
-  // ======== TOOL SELECTION ========
+  // ======== CHIP INTERACTIVITY ========
   const chips = document.querySelectorAll(".chip");
   chips.forEach((chip) => {
     chip.addEventListener("click", () => {
-      // Remove active from all siblings
-      chip.parentElement.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
+      chip.parentElement.querySelectorAll(".chip").forEach(c => c.classList.remove("active"));
       chip.classList.add("active");
 
       const tool = chip.dataset.tool;
       if (tool) currentTool = tool;
 
       const style = chip.dataset.style;
-      if (style) currentStyle = style;
+      if (style) currentGlasses = style;
 
       const makeup = chip.dataset.makeup;
       if (makeup) currentMakeup = makeup;
 
       const bg = chip.dataset.bg;
       if (bg) currentBg = bg;
+
+      drawCanvas();
     });
   });
 });
