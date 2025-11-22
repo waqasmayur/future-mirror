@@ -1,116 +1,81 @@
 <!doctype html>
 <html lang="en">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Future Mirror — Hologram Lab</title>
-<link rel="stylesheet" href="style.css">
-<link rel="manifest" href="manifest.json">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Future Mirror — Hologram Lab</title>
+  <link rel="stylesheet" href="style.css">
 </head>
-
 <body>
-<div class="app" id="app">
+  <div class="app" id="app">
 
-  <div class="cam-panel">
-    <div style="display:flex;justify-content:space-between;align-items:center;">
-      <div>
-        <div class="title">
-          <span class="neon">Future Mirror</span>
-          <span style="font-size:12px;color:#bfa3ff">Hologram Lab</span>
+    <div class="cam-panel">
+      <div class="header-row">
+        <div>
+          <div class="title"><span class="neon">Future Mirror</span> <span class="muted-small">Hologram Lab</span></div>
+          <div class="subtitle">Try-on makeup (brush), glasses & jewelry (image items). Click to place — drag to paint.</div>
         </div>
-        <div class="subtitle">Try-on makeup, jewelry, glasses — place items exactly where you click.</div>
+        <div class="badge">Alpha Prototype</div>
       </div>
-      <div class="badge">Alpha Prototype</div>
-    </div>
 
-    <!-- Upload -->
-    <div style="margin:12px 0;">
-      <input type="file" id="uploadImage" accept="image/*">
-    </div>
-
-    <!-- Canvas -->
-    <div class="camera-wrap" id="cameraWrap">
-      <video id="input_video" autoplay playsinline muted style="display:none;"></video>
-      <canvas id="overlay" width="640" height="480"></canvas>
-      <div class="holo-frame"></div>
-      <div class="scan-line"></div>
-    </div>
-
-    <!-- Buttons -->
-    <div style="display:flex;align-items:center;gap:10px;margin-top:14px;">
-      <div class="toolbar">
-        <button class="btn neon" id="startBtn">Start Camera</button>
-        <button class="btn" id="stopBtn">Stop Camera</button>
-        <button class="btn save-btn" id="saveBtn">Save HoloShot</button>
-        <button class="btn" id="downloadBtn" style="display:none;">Download</button>
+      <div class="upload-row">
+        <input type="file" id="uploadImage" accept="image/*">
       </div>
-      <div style="margin-left:auto" class="muted">Tip: upload a photo or start camera</div>
+
+      <div class="camera-wrap" id="cameraWrap">
+        <video id="input_video" autoplay playsinline muted style="display:none"></video>
+        <canvas id="overlay" width="640" height="480"></canvas>
+      </div>
+
+      <div class="controls-row">
+        <div class="toolbar">
+          <button class="btn neon" id="startBtn">Start Camera</button>
+          <button class="btn" id="stopBtn">Stop Camera</button>
+          <button class="btn save-btn" id="saveBtn">Save HoloShot</button>
+        </div>
+        <div class="muted tip">Tip: upload a photo or start camera. Choose a tool and click/drag on the image.</div>
+      </div>
     </div>
+
+    <div class="controls">
+      <div class="section-title">TOOLS</div>
+
+      <!-- MAIN TOOL CATEGORIES -->
+      <div class="control-row" id="mainTools">
+        <div class="chip active" data-category="makeup">Makeup</div>
+        <div class="chip" data-category="glasses">Glasses</div>
+        <div class="chip" data-category="jewelry">Jewelry</div>
+        <div class="chip" data-category="none">None</div>
+      </div>
+
+      <hr/>
+
+      <div class="section-title">SUBTOOLS</div>
+      <div id="subTools" class="subtools"></div>
+
+      <hr/>
+
+      <div id="transformPanel" style="display:none">
+        <div class="label">Selected Item</div>
+        <div class="small-row">
+          <label>Scale <input id="scaleSlider" type="range" min="0.2" max="3" step="0.01" value="1"></label>
+        </div>
+        <div class="small-row">
+          <label>Rotate <input id="rotateSlider" type="range" min="-180" max="180" step="1" value="0"></label>
+        </div>
+        <div class="small-row">
+          <button class="btn" id="deleteItemBtn">Delete Item</button>
+          <button class="btn" id="bringFrontBtn">Bring Front</button>
+        </div>
+      </div>
+
+      <div style="margin-top:12px;color:#bfb6d9;font-size:13px">
+        Brush mode: drag on the canvas to paint. Image items: click to place, then select to move/transform.
+      </div>
+    </div>
+
   </div>
 
-
-  <!-- ==================== CONTROLS PANEL ==================== -->
-  <div class="controls">
-
-    <div class="section-title">TOOLS</div>
-
-    <!-- Main Categories -->
-    <div class="control-row">
-      <div class="chip active" data-tool="makeup">Makeup</div>
-      <div class="chip" data-tool="jewelry">Jewelry</div>
-      <div class="chip" data-tool="glasses">Glasses</div>
-      <div class="chip" data-tool="none">None</div>
-    </div>
-
-
-    <!-- ==================== MAKEUP ==================== -->
-    <div id="makeup-tools" style="margin-top:15px;">
-      <div class="muted">Makeup Tools</div>
-
-      <div class="control-row">
-        <div class="chip" data-makeup="lip-red">Lipstick: Red</div>
-        <div class="chip" data-makeup="lip-pink">Lipstick: Pink</div>
-        <div class="chip" data-makeup="eyeliner-black">Eyeliner: Black</div>
-        <div class="chip" data-makeup="blush-rose">Blush: Rose</div>
-      </div>
-    </div>
-
-
-    <!-- ==================== JEWELRY ==================== -->
-    <div id="jewelry-tools" style="margin-top:15px; display:none;">
-      <div class="muted">Jewelry</div>
-
-      <div class="control-row">
-        <div class="chip" data-jewelry="earring-gold">Gold Earrings</div>
-        <div class="chip" data-jewelry="earring-silver">Silver Earrings</div>
-        <div class="chip" data-jewelry="nose-ring">Nose Ring</div>
-        <div class="chip" data-jewelry="necklace-pearl">Pearl Necklace</div>
-      </div>
-    </div>
-
-
-    <!-- ==================== GLASSES ==================== -->
-    <div id="glasses-tools" style="margin-top:15px; display:none;">
-      <div class="muted">Glasses</div>
-
-      <div class="control-row">
-        <div class="chip" data-style="glasses-black">Black Glasses</div>
-        <div class="chip" data-style="glasses-round">Round Glasses</div>
-        <div class="chip" data-style="glasses-aviator">Aviator</div>
-      </div>
-    </div>
-
-
-    <div class="footer">
-      Built for <strong>Future Mirror</strong> — Hologram Lab. Local processing — we don't upload your images.
-    </div>
-  </div>
-</div>
-
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js"></script>
-<script src="app.js"></script>
-
+  <script src="app.js"></script>
 </body>
 </html>
