@@ -1,4 +1,4 @@
-// app.js - Click-to-place + Brush stroke + image item transform
+// app.js — Canvas Zoom & Pan + Brush (drag) + Image item placement & transform
 document.addEventListener("DOMContentLoaded", () => {
   console.log("Future Mirror Loaded");
 
@@ -11,8 +11,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const stopBtn = document.getElementById("stopBtn");
   const saveBtn = document.getElementById("saveBtn");
 
-  const video = document.getElementById("input_video");
-
   const mainTools = document.getElementById("mainTools");
   const subTools = document.getElementById("subTools");
   const transformPanel = document.getElementById("transformPanel");
@@ -21,31 +19,60 @@ document.addEventListener("DOMContentLoaded", () => {
   const deleteItemBtn = document.getElementById("deleteItemBtn");
   const bringFrontBtn = document.getElementById("bringFrontBtn");
 
-  // STATE
-  let baseImage = null; // uploaded image element
+  const zoomInBtn = document.getElementById("zoomInBtn");
+  const zoomOutBtn = document.getElementById("zoomOutBtn");
+  const resetViewBtn = document.getElementById("resetViewBtn");
+
+  const brushSizePlus = document.getElementById("brushSizePlus");
+  const brushSizeMinus = document.getElementById("brushSizeMinus");
+  const brushSizeVal = document.getElementById("brushSizeVal");
+  const brushColorPicker = document.getElementById("brushColorPicker");
+  const brushPrevColor = document.getElementById("brushPrevColor");
+  const brushNextColor = document.getElementById("brushNextColor");
+  const brushOpacity = document.getElementById("brushOpacity");
+
+  // State
+  let baseImage = null;   // uploaded image
   let useVideo = false;
   let videoStream = null;
+  const video = document.getElementById("input_video");
 
-  let activeCategory = "makeup"; // makeup | glasses | jewelry | none
-  let activeSubtool = null;      // e.g. 'lip-red' or 'glasses-black'
-  let activeSubtoolType = null;  // 'brush' or 'image' or null
+  // View transform (world -> screen)
+  let view = {
+    scale: 1.0,
+    offsetX: 0,
+    offsetY: 0
+  };
 
-  // brush strokes storage
-  const strokes = []; // {points: [{x,y},...], color, size}
-  let isDrawing = false;
+  // Drawing + items (world coordinates)
+  const strokes = []; // {points: [{x,y}], color, size, opacity}
   let currentStroke = null;
+  let isDrawing = false;
 
-  // placed image items
-  const items = []; // {id, src, x, y, scale, rotation, img (Image obj), w, h}
+  const items = []; // {id, img, src, x, y, w, h, scale, rotation}
   let selectedItemId = null;
+  let draggingItem = null;
+  let dragOffset = { x: 0, y: 0 };
 
-  // assets manifest for subtools (files must exist in assets/...)
+  // active tool/subtool
+  let activeCategory = "makeup";
+  let activeSubtool = null; // id string
+  let activeSubtoolDef = null; // definition from SUBTOOLS
+
+  // brush defaults and palette
+  let brushSize = 18;
+  let brushColor = "#DC143C";
+  let brushOpacityVal = 0.6;
+  const colorPalette = ["#DC143C","#FF66B2","#FFCAA0","#8030FF","#0022FF","#FFFFFF","#000000"];
+  let paletteIndex = 0;
+
+  // Subtools manifest (update src paths to match your asset filenames)
   const SUBTOOLS = {
     makeup: [
-      { id: "lip-red", label: "Lipstick Red", type: "brush", color: "rgba(220,20,60,0.6)", size: 18 },
-      { id: "lip-pink", label: "Lipstick Pink", type: "brush", color: "rgba(255,102,178,0.5)", size: 16 },
-      { id: "eyeliner-black", label: "Eyeliner Black", type: "brush", color: "rgba(20,20,20,0.95)", size: 4 },
-      { id: "blush-rose", label: "Blush Rose", type: "brush", color: "rgba(255,20,150,0.18)", size: 40 }
+      { id: "lip-red", label: "Lipstick Red", type: "brush", color: "#DC143C", size: 18 },
+      { id: "lip-pink", label: "Lipstick Pink", type: "brush", color: "#FF66B2", size: 16 },
+      { id: "eyeliner-black", label: "Eyeliner Black", type: "brush", color: "#111111", size: 3 },
+      { id: "blush-rose", label: "Blush Rose", type: "brush", color: "#FF1493", size: 36 }
     ],
     glasses: [
       { id: "glasses-black", label: "Glasses Black", type: "image", src: "assets/glasses/glasses-black.png" },
@@ -60,74 +87,80 @@ document.addEventListener("DOMContentLoaded", () => {
     ]
   };
 
-  // UTILITIES
-  function fitCanvasToDisplay() {
-    // keep canvas at fixed internal resolution; use CSS width for responsiveness
-    // canvas.width & canvas.height already set in HTML
+  // UTILS — coordinate transforms
+  function screenToWorld(sx, sy) {
+    const rect = canvas.getBoundingClientRect();
+    const x = (sx - rect.left - view.offsetX) / view.scale;
+    const y = (sy - rect.top - view.offsetY) / view.scale;
+    return { x, y };
+  }
+  function worldToScreen(wx, wy) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = rect.left + view.offsetX + wx * view.scale;
+    const sy = rect.top + view.offsetY + wy * view.scale;
+    return { x: sx, y: sy };
   }
 
-  // DRAW LOOP (synchronous redraw)
+  // draw helpers
+  function drawImageCover(img, dx, dy, dw, dh) {
+    const iw = img.width, ih = img.height;
+    const r = Math.max(dw / iw, dh / ih);
+    const nw = iw * r, nh = ih * r;
+    const cx = (nw - dw) / 2, cy = (nh - dh) / 2;
+    ctx.drawImage(img, -cx + dx, -cy + dy, nw, nh);
+  }
+
   function redrawAll() {
+    // clear
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    // draw base: uploaded image or video
+    // save and apply view transform
+    ctx.save();
+    ctx.translate(view.offsetX, view.offsetY);
+    ctx.scale(view.scale, view.scale);
+
+    // draw base
     if (baseImage) {
-      drawImageCover(baseImage, 0, 0, canvas.width, canvas.height);
+      drawImageCover(baseImage, 0, 0, canvas.width / view.scale, canvas.height / view.scale);
     } else if (useVideo && video && video.readyState >= 2) {
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      // draw video framed to cover
+      ctx.drawImage(video, 0, 0, canvas.width / view.scale, canvas.height / view.scale);
     } else {
-      // blank bg
       ctx.fillStyle = "#0a0610";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.fillRect(0, 0, canvas.width / view.scale, canvas.height / view.scale);
     }
 
-    // draw strokes
-    strokes.forEach(s => {
-      drawStroke(s);
-    });
-
-    // if currently drawing, draw it too
+    // draw strokes (world coords)
+    strokes.forEach(s => drawStroke(s));
     if (currentStroke) drawStroke(currentStroke);
 
-    // draw items in order
-    items.forEach(it => {
-      drawItem(it);
-    });
+    // draw items (world coords)
+    items.forEach(it => drawItem(it));
 
-    // draw selection box if an item selected
+    // draw selection box for selected item
     if (selectedItemId) {
       const it = items.find(i => i.id === selectedItemId);
       if (it) drawSelection(it);
     }
+
+    ctx.restore();
   }
 
-  function drawImageCover(img, x, y, w, h) {
-    // cover behavior to fill canvas while keeping aspect
-    const iw = img.width, ih = img.height;
-    const r = Math.max(w / iw, h / ih);
-    const nw = iw * r, nh = ih * r;
-    const cx = (nw - w) / 2, cy = (nh - h) / 2;
-    ctx.drawImage(img, -cx + x, -cy + y, nw, nh);
-  }
-
-  // strokes: points array
   function drawStroke(s) {
     if (!s || !s.points || s.points.length === 0) return;
     ctx.save();
     ctx.lineJoin = "round";
     ctx.lineCap = "round";
-    ctx.strokeStyle = s.color;
-    ctx.lineWidth = s.size;
     ctx.beginPath();
+    ctx.strokeStyle = s.color;
+    ctx.globalAlpha = s.opacity;
+    ctx.lineWidth = s.size;
     ctx.moveTo(s.points[0].x, s.points[0].y);
-    for (let i = 1; i < s.points.length; i++) {
-      ctx.lineTo(s.points[i].x, s.points[i].y);
-    }
+    for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
     ctx.stroke();
     ctx.restore();
   }
 
-  // draw an image item with transform
   function drawItem(it) {
     if (!it.img || !it.img.complete) return;
     ctx.save();
@@ -139,25 +172,22 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function drawSelection(it) {
-    if (!it.img || !it.img.complete) return;
-    // compute box in world coords
-    const halfW = (it.w * it.scale) / 2;
-    const halfH = (it.h * it.scale) / 2;
-    // draw rotated rect
+    if (!it) return;
     ctx.save();
     ctx.translate(it.x, it.y);
     ctx.rotate(it.rotation * Math.PI / 180);
-    ctx.strokeStyle = "rgba(255,255,255,0.8)";
-    ctx.lineWidth = 2;
-    ctx.setLineDash([6, 6]);
-    ctx.strokeRect(-halfW, -halfH, halfW * 2, halfH * 2);
+    const hw = (it.w * it.scale) / 2, hh = (it.h * it.scale) / 2;
+    ctx.strokeStyle = "rgba(255,255,255,0.9)";
+    ctx.setLineDash([6,6]);
+    ctx.lineWidth = 2 / view.scale;
+    ctx.strokeRect(-hw, -hh, hw*2, hh*2);
     ctx.setLineDash([]);
     ctx.restore();
   }
 
-  // ITEM HIT TEST (click to select or to place)
-  function pointInItem(px, py, it) {
-    // transform point into item local space
+  // hit test in world coords
+  function pointInItemWorld(px, py, it) {
+    // px,py are world coords
     const dx = px - it.x;
     const dy = py - it.y;
     const angle = -it.rotation * Math.PI / 180;
@@ -168,193 +198,81 @@ document.addEventListener("DOMContentLoaded", () => {
     return rx >= -hw && rx <= hw && ry >= -hh && ry <= hh;
   }
 
-  // generate unique id
-  function uid(prefix = "it") {
-    return prefix + "-" + Math.random().toString(36).slice(2, 9);
+  // unique id
+  function uid(prefix="it") {
+    return prefix + "-" + Math.random().toString(36).slice(2,9);
   }
 
-  // EVENTS: main tool click -> populate subTools
-  mainTools.querySelectorAll(".chip").forEach(ch => {
-    ch.addEventListener("click", () => {
-      mainTools.querySelectorAll(".chip").forEach(x => x.classList.remove("active"));
-      ch.classList.add("active");
-      activeCategory = ch.dataset.category || "none";
-      buildSubtools(activeCategory);
-      // clear active subtool selection
-      activeSubtool = null;
-      activeSubtoolType = null;
-      canvas.style.cursor = "default";
-      hideTransformPanel();
-    });
-  });
-
+  // build subtools UI based on category
   function buildSubtools(category) {
     subTools.innerHTML = "";
-    if (!SUBTOOLS[category]) return;
-    SUBTOOLS[category].forEach(st => {
-      const d = document.createElement("div");
-      d.className = "chip";
-      d.textContent = st.label;
-      d.dataset.id = st.id;
-      d.addEventListener("click", () => {
-        // visually mark active among subtools
-        subTools.querySelectorAll(".chip").forEach(x => x.classList.remove("active"));
-        d.classList.add("active");
+    const list = SUBTOOLS[category] || [];
+    list.forEach(st => {
+      const el = document.createElement("div");
+      el.className = "chip";
+      el.textContent = st.label;
+      el.dataset.id = st.id;
+      el.addEventListener("click", () => {
+        // mark active
+        subTools.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));
+        el.classList.add("active");
         activeSubtool = st.id;
-        activeSubtoolType = st.type;
-        // if brush, change cursor and prepare color/size
+        activeSubtoolDef = st;
+        // set brush defaults if brush
         if (st.type === "brush") {
-          canvas.style.cursor = "crosshair";
-        } else if (st.type === "image") {
-          // image tools use default cursor (we will show preview when placing)
-          canvas.style.cursor = "pointer";
+          brushColor = st.color || brushColor;
+          brushSize = st.size || brushSize;
+          brushOpacityVal = parseFloat(brushOpacity.value);
+          brushColorPicker.value = rgbToHex(brushColor);
+          brushSizeVal.textContent = brushSize;
+        } else {
+          // image tool: set pointer
         }
       });
-      subTools.appendChild(d);
+      subTools.appendChild(el);
     });
   }
 
-  // initial build
+  // initial fill
   buildSubtools(activeCategory);
 
-  // CANVAS POINTER HANDLING (supports brush draw drag and item interactions)
-  let pointerDown = false;
-  let draggingItem = null;
-  let dragOffset = { x: 0, y: 0 };
-
-  canvas.addEventListener("pointerdown", (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const px = (e.clientX - rect.left);
-    const py = (e.clientY - rect.top);
-    pointerDown = true;
-
-    // If active subtool is brush type -> start stroke
-    const st = findSubtoolById(activeSubtool);
-    if (st && st.type === "brush") {
-      isDrawing = true;
-      currentStroke = { points: [{ x: px, y: py }], color: st.color, size: st.size };
-      redrawAll();
-      return;
-    }
-
-    // else if clicking on existing item -> select & start dragging
-    const topItem = findTopItemAt(px, py);
-    if (topItem) {
-      selectedItemId = topItem.id;
-      draggingItem = topItem;
-      dragOffset.x = px - topItem.x;
-      dragOffset.y = py - topItem.y;
-      showTransformPanelFor(topItem);
-      redrawAll();
-      return;
-    }
-
-    // else if subtool is image -> place a new image at clicked point
-    if (st && st.type === "image") {
-      placeImageAt(st.src, px, py);
-      return;
-    }
-
-    // click on empty space -> deselect
-    selectedItemId = null;
-    hideTransformPanel();
-    redrawAll();
+  // main category click
+  mainTools.querySelectorAll(".chip").forEach(ch => {
+    ch.addEventListener("click", () => {
+      mainTools.querySelectorAll(".chip").forEach(x=>x.classList.remove("active"));
+      ch.classList.add("active");
+      activeCategory = ch.dataset.category || "none";
+      activeSubtool = null;
+      activeSubtoolDef = null;
+      buildSubtools(activeCategory);
+      // hide transform panel
+      hideTransformPanel();
+      canvas.style.cursor = "crosshair";
+    });
   });
 
-  canvas.addEventListener("pointermove", (e) => {
-    if (!pointerDown) return;
-    const rect = canvas.getBoundingClientRect();
-    const px = (e.clientX - rect.left);
-    const py = (e.clientY - rect.top);
+  // brush controls: size
+  const brushSizeDisplayEl = document.getElementById("brushSizeVal");
+  brushSizeDisplayEl.textContent = brushSize;
+  brushSizePlus.addEventListener("click", () => { brushSize = Math.min(200, brushSize + 2); brushSizeDisplayEl.textContent = brushSize; });
+  brushSizeMinus.addEventListener("click", () => { brushSize = Math.max(1, brushSize - 2); brushSizeDisplayEl.textContent = brushSize; });
 
-    if (isDrawing && currentStroke) {
-      currentStroke.points.push({ x: px, y: py });
-      redrawAll();
-      return;
-    }
+  // brush color palette
+  brushColorPicker.addEventListener("input", (e) => { brushColor = e.target.value; });
+  brushOpacity.addEventListener("input", (e) => { brushOpacityVal = parseFloat(e.target.value); });
 
-    if (draggingItem) {
-      draggingItem.x = px - dragOffset.x;
-      draggingItem.y = py - dragOffset.y;
-      // update sliders values to reflect new transform
-      if (selectedItemId === draggingItem.id) {
-        updateTransformSliders(draggingItem);
-      }
-      redrawAll();
-      return;
-    }
+  brushPrevColor.addEventListener("click", () => {
+    paletteIndex = (paletteIndex - 1 + colorPalette.length) % colorPalette.length;
+    brushColor = colorPalette[paletteIndex];
+    brushColorPicker.value = brushColor;
+  });
+  brushNextColor.addEventListener("click", () => {
+    paletteIndex = (paletteIndex + 1) % colorPalette.length;
+    brushColor = colorPalette[paletteIndex];
+    brushColorPicker.value = brushColor;
   });
 
-  canvas.addEventListener("pointerup", (e) => {
-    pointerDown = false;
-    if (isDrawing && currentStroke) {
-      strokes.push(currentStroke);
-      currentStroke = null;
-      isDrawing = false;
-      redrawAll();
-    }
-    draggingItem = null;
-  });
-
-  canvas.addEventListener("pointercancel", () => {
-    pointerDown = false;
-    isDrawing = false;
-    draggingItem = null;
-    currentStroke = null;
-  });
-
-  function findSubtoolById(id) {
-    if (!id) return null;
-    const all = Object.values(SUBTOOLS).flat();
-    return all.find(s => s.id === id) || null;
-  }
-
-  function findTopItemAt(px, py) {
-    // iterate items from top to bottom (end is top)
-    for (let i = items.length - 1; i >= 0; i--) {
-      if (pointInItem(px, py, items[i])) return items[i];
-    }
-    return null;
-  }
-
-  // place image item
-  function placeImageAt(src, x, y) {
-    const img = new Image();
-    img.onload = () => {
-      const id = uid("item");
-      const it = {
-        id,
-        src,
-        img,
-        x,
-        y,
-        w: Math.min(img.width, 300),
-        h: Math.min(img.height, 200),
-        scale: 1,
-        rotation: 0
-      };
-      items.push(it);
-      selectedItemId = id;
-      showTransformPanelFor(it);
-      redrawAll();
-    };
-    img.onerror = () => {
-      alert("Failed to load asset: " + src);
-    };
-    img.src = src;
-  }
-
-  // transform panel handlers
-  function showTransformPanelFor(it) {
-    transformPanel.style.display = "";
-    scaleSlider.value = it.scale;
-    rotateSlider.value = it.rotation;
-    selectedItemId = it.id;
-  }
-  function hideTransformPanel() {
-    transformPanel.style.display = "none";
-    selectedItemId = null;
-  }
+  // transform panel actions
   scaleSlider.addEventListener("input", () => {
     if (!selectedItemId) return;
     const it = items.find(i => i.id === selectedItemId);
@@ -372,7 +290,7 @@ document.addEventListener("DOMContentLoaded", () => {
   deleteItemBtn.addEventListener("click", () => {
     if (!selectedItemId) return;
     const idx = items.findIndex(i => i.id === selectedItemId);
-    if (idx >= 0) items.splice(idx, 1);
+    if (idx >= 0) items.splice(idx,1);
     selectedItemId = null;
     hideTransformPanel();
     redrawAll();
@@ -381,28 +299,197 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!selectedItemId) return;
     const idx = items.findIndex(i => i.id === selectedItemId);
     if (idx >= 0) {
-      const it = items.splice(idx, 1)[0];
+      const it = items.splice(idx,1)[0];
       items.push(it);
       redrawAll();
     }
   });
 
-  function updateTransformSliders(it) {
+  function showTransformPanelFor(it) {
+    transformPanel.style.display = "";
     scaleSlider.value = it.scale;
     rotateSlider.value = it.rotation;
+    selectedItemId = it.id;
+  }
+  function hideTransformPanel() {
+    transformPanel.style.display = "none";
+    selectedItemId = null;
   }
 
-  // save button - export canvas to PNG
-  saveBtn.addEventListener("click", () => {
-    // redraw to ensure current frame is drawn
+  // place image item at world coords
+  function placeImageAt(src, wx, wy) {
+    const img = new Image();
+    img.onload = () => {
+      const id = uid("itm");
+      const w = Math.min(400, img.width);
+      const h = Math.min(300, img.height);
+      const it = { id, img, src, x: wx, y: wy, w, h, scale: 1, rotation: 0 };
+      items.push(it);
+      selectedItemId = id;
+      showTransformPanelFor(it);
+      redrawAll();
+    };
+    img.onerror = () => alert("Failed to load asset: " + src);
+    img.src = src;
+  }
+
+  // pointer & interaction handling — map pointer events to world coords
+  let pointerDown = false;
+  let pointerMode = "idle"; // 'pan' when space held and dragging, 'draw', 'dragItem'
+  let lastPointer = { sx:0, sy:0 }; // screen coords
+  let lastPan = { x:0, y:0 };
+
+  canvas.addEventListener("pointerdown", (ev) => {
+    canvas.setPointerCapture(ev.pointerId);
+    pointerDown = true;
+    lastPointer.sx = ev.clientX; lastPointer.sy = ev.clientY;
+
+    const isPan = ev.shiftKey || ev.altKey || window.spacePressed; // additional pan keys allowed; also allow space detection
+    if (isPan) {
+      pointerMode = "pan";
+      lastPan.x = ev.clientX; lastPan.y = ev.clientY;
+      return;
+    }
+
+    const sw = screenToWorld(ev.clientX, ev.clientY);
+    // if active subtool is brush -> start stroke (world coords)
+    if (activeSubtoolDef && activeSubtoolDef.type === "brush") {
+      pointerMode = "draw";
+      currentStroke = { points: [{x: sw.x, y: sw.y}], color: brushColor, size: brushSize / view.scale, opacity: brushOpacityVal };
+      isDrawing = true;
+      redrawAll();
+      return;
+    }
+
+    // check if clicking an existing item (topmost)
+    const top = findTopItemAt(sw.x, sw.y);
+    if (top) {
+      // select and start dragging
+      selectedItemId = top.id;
+      draggingItem = top;
+      dragOffset.x = sw.x - top.x;
+      dragOffset.y = sw.y - top.y;
+      pointerMode = "dragItem";
+      showTransformPanelFor(top);
+      redrawAll();
+      return;
+    }
+
+    // else if subtool is image -> place image
+    if (activeSubtoolDef && activeSubtoolDef.type === "image") {
+      placeImageAt(activeSubtoolDef.src, sw.x, sw.y);
+      pointerMode = "idle";
+      return;
+    }
+
+    // otherwise clicked on empty
+    selectedItemId = null;
+    hideTransformPanel();
     redrawAll();
-    const link = document.createElement("a");
-    link.download = "future_mirror.png";
-    link.href = canvas.toDataURL("image/png");
-    link.click();
   });
 
-  // camera start/stop
+  canvas.addEventListener("pointermove", (ev) => {
+    lastPointer.sx = ev.clientX; lastPointer.sy = ev.clientY;
+    if (!pointerDown) return;
+
+    if (pointerMode === "pan") {
+      const dx = ev.clientX - lastPan.x;
+      const dy = ev.clientY - lastPan.y;
+      lastPan.x = ev.clientX; lastPan.y = ev.clientY;
+      view.offsetX += dx;
+      view.offsetY += dy;
+      redrawAll();
+      return;
+    }
+
+    const sw = screenToWorld(ev.clientX, ev.clientY);
+
+    if (pointerMode === "draw" && currentStroke) {
+      currentStroke.points.push({ x: sw.x, y: sw.y });
+      redrawAll();
+      return;
+    }
+
+    if (pointerMode === "dragItem" && draggingItem) {
+      draggingItem.x = sw.x - dragOffset.x;
+      draggingItem.y = sw.y - dragOffset.y;
+      // sync sliders
+      if (selectedItemId === draggingItem.id) {
+        scaleSlider.value = draggingItem.scale;
+        rotateSlider.value = draggingItem.rotation;
+      }
+      redrawAll();
+      return;
+    }
+  });
+
+  canvas.addEventListener("pointerup", (ev) => {
+    canvas.releasePointerCapture(ev.pointerId);
+    pointerDown = false;
+    if (pointerMode === "draw" && currentStroke) {
+      strokes.push(currentStroke);
+      currentStroke = null;
+      isDrawing = false;
+      redrawAll();
+    }
+    pointerMode = "idle";
+    draggingItem = null;
+  });
+  canvas.addEventListener("pointercancel", () => { pointerDown = false; pointerMode = "idle"; currentStroke=null; draggingItem=null; });
+
+  // find topmost item at world coords
+  function findTopItemAt(wx, wy) {
+    for (let i = items.length - 1; i >= 0; i--) {
+      if (pointInItemWorld(wx, wy, items[i])) return items[i];
+    }
+    return null;
+  }
+
+  // wheel zoom at cursor
+  canvas.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const delta = -e.deltaY;
+    const zoomFactor = delta > 0 ? 1.08 : 0.92;
+    const rect = canvas.getBoundingClientRect();
+    const cx = e.clientX - rect.left;
+    const cy = e.clientY - rect.top;
+
+    // world coordinate at cursor before
+    const before = screenToWorld(e.clientX, e.clientY);
+
+    // apply scale
+    view.scale *= zoomFactor;
+    view.scale = Math.min(Math.max(0.2, view.scale), 8);
+
+    // compute new offset so the same world point stays under cursor
+    const afterScreenX = view.offsetX + before.x * view.scale;
+    const afterScreenY = view.offsetY + before.y * view.scale;
+    view.offsetX += cx - (rect.left + afterScreenX);
+    view.offsetY += cy - (rect.top + afterScreenY);
+
+    redrawAll();
+  }, { passive: false });
+
+  // zoom buttons
+  zoomInBtn.addEventListener("click", () => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    const fakeEvent = { clientX: cx, clientY: cy, deltaY: -120, preventDefault: ()=>{} };
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, clientX: cx, clientY: cy }));
+  });
+  zoomOutBtn.addEventListener("click", () => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.left + rect.width/2, cy = rect.top + rect.height/2;
+    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, clientX: cx, clientY: cy }));
+  });
+  resetViewBtn.addEventListener("click", () => {
+    view.scale = 1;
+    view.offsetX = 0;
+    view.offsetY = 0;
+    redrawAll();
+  });
+
+  // start/stop camera
   startBtn.addEventListener("click", async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -411,33 +498,27 @@ document.addEventListener("DOMContentLoaded", () => {
       videoStream = stream;
       useVideo = true;
       baseImage = null;
-      // redraw video frame in requestAnimationFrame loop
-      requestAnimationFrame(videoFrameLoop);
+      requestAnimationFrame(loopVideoDraw);
     } catch (err) {
       alert("Camera error: " + (err.message || err.name));
       console.error(err);
     }
   });
-
   stopBtn.addEventListener("click", () => {
-    if (videoStream) {
-      videoStream.getTracks().forEach(t => t.stop());
-      videoStream = null;
-    }
+    if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream=null; }
     useVideo = false;
     video.srcObject = null;
     redrawAll();
   });
 
-  function videoFrameLoop() {
+  function loopVideoDraw() {
     if (useVideo && video && video.readyState >= 2) {
-      // draw live frame then overlays
       redrawAll();
-      requestAnimationFrame(videoFrameLoop);
+      requestAnimationFrame(loopVideoDraw);
     }
   }
 
-  // upload image
+  // upload file
   uploadInput.addEventListener("change", (e) => {
     const f = e.target.files && e.target.files[0];
     if (!f) return;
@@ -445,19 +526,57 @@ document.addEventListener("DOMContentLoaded", () => {
     img.onload = () => {
       baseImage = img;
       useVideo = false;
-      if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
+      if (videoStream) { videoStream.getTracks().forEach(t=>t.stop()); videoStream = null; }
+      // initialize view offsets to center image nicely (optional)
+      view.scale = 1;
+      view.offsetX = 0;
+      view.offsetY = 0;
       redrawAll();
     };
     img.src = URL.createObjectURL(f);
   });
 
+  // save/export
+  saveBtn.addEventListener("click", () => {
+    // draw one final time
+    redrawAll();
+    const link = document.createElement("a");
+    link.download = "future_mirror.png";
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+  });
+
+  // helper convert color like "#rrggbb" or css rgba -> hex
+  function rgbToHex(c) {
+    // accept hex already
+    if (c.startsWith("#")) return c;
+    return "#dc143c";
+  }
+
+  // find subtool by id across manifest
+  function findSubtool(id) {
+    if (!id) return null;
+    const arr = Object.values(SUBTOOLS).flat();
+    return arr.find(x=>x.id === id) || null;
+  }
+
+  // pointer for keyboard space detection (for pan)
+  window.spacePressed = false;
+  window.addEventListener("keydown", (e)=> { if (e.code === "Space") { window.spacePressed = true; canvas.style.cursor='grab'; e.preventDefault(); } });
+  window.addEventListener("keyup", (e)=> { if (e.code === "Space") { window.spacePressed = false; canvas.style.cursor='crosshair'; } });
+
+  // find top item at world coords
+  function findTopItemAt(wx, wy) {
+    for (let i = items.length - 1; i >= 0; i--) if (pointInItemWorld(wx, wy, items[i])) return items[i];
+    return null;
+  }
+
+  // expose debug
+  window.__fm = { strokes, items, redrawAll, placeImageAt };
+
   // initial draw
   redrawAll();
 
-  // helper uid
-  function uid(prefix = "id") { return prefix + "-" + Math.random().toString(36).slice(2,9); }
-
-  // Expose some debug helpers (optional)
-  window.__fm = { strokes, items, redrawAll, placeImageAt };
-
+  // click subtools population uses same buildSubtools() defined earlier; ensure initial build
+  buildSubtools(activeCategory);
 });
