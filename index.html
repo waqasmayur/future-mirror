@@ -12,7 +12,7 @@
       <div class="header-row">
         <div>
           <div class="title"><span class="neon">Future Mirror</span> <span class="muted-small">Hologram Lab</span></div>
-          <div class="subtitle">Zoom & pan your image, brush makeup precisely, place glasses & jewelry accurately.</div>
+          <div class="subtitle">Zoom & pan your image, brush makeup precisely, place glasses & jewelry.</div>
         </div>
         <div class="badge">Alpha Prototype</div>
       </div>
@@ -75,6 +75,13 @@
         Opacity <input id="brushOpacity" type="range" min="0.05" max="1" step="0.01" value="0.6">
       </div>
 
+      <div class="small-row" style="margin-top:8px;">
+        <button class="btn" id="eraserBtn">Eraser</button>
+        <div id="eraserSizeDisplay">Eraser: <span id="eraserSizeVal">36</span></div>
+        <button class="btn" id="eraserMinus">−</button>
+        <button class="btn" id="eraserPlus">+</button>
+      </div>
+
       <hr/>
 
       <div id="transformPanel" style="display:none">
@@ -91,7 +98,14 @@
         </div>
       </div>
 
-      <div style="margin-top:12px;color:#bfb6d9;font-size:13px">Brush mode = drag to paint (world-space). Image items = click to place, then select to transform.</div>
+      <hr/>
+
+      <div class="small-row">
+        <button class="btn" id="undoBtn">Undo (Ctrl+Z)</button>
+        <button class="btn" id="redoBtn">Redo (Ctrl+Y)</button>
+      </div>
+
+      <div style="margin-top:12px;color:#bfb6d9;font-size:13px">Brush = smooth strokes (world-space). Eraser removes whole strokes & stickers under cursor.</div>
     </div>
   </div>
 
