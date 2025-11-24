@@ -8,7 +8,7 @@
 }
 *{box-sizing:border-box}
 body{margin:0;background:linear-gradient(180deg,#05030a 0%, #0b0711 100%);color:#fff;min-height:100vh}
-.app{display:flex;gap:18px;padding:18px;align-items:flex-start;max-width:1200px;margin:18px auto}
+.app{display:flex;gap:18px;padding:18px;align-items:flex-start;max-width:1400px;margin:18px auto}
 .cam-panel{flex:1;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));padding:14px;border-radius:12px;box-shadow:0 6px 30px rgba(0,0,0,0.6)}
 .header-row{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}
 .title{font-size:20px;font-weight:700}
@@ -18,11 +18,11 @@ body{margin:0;background:linear-gradient(180deg,#05030a 0%, #0b0711 100%);color:
 .badge{background:linear-gradient(90deg,#6f00ff,#c07dff);padding:6px 8px;border-radius:8px;font-size:12px}
 
 .upload-row{margin:12px 0}
-.camera-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;width:640px;max-width:100%}
+.camera-wrap{position:relative;border-radius:10px;overflow:hidden;background:#000;width:900px;max-width:100%}
 #overlay{display:block;width:100%;height:auto;background:#111;cursor:crosshair}
 
 /* Controls */
-.controls{width:360px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));padding:14px;border-radius:12px;height:fit-content}
+.controls{width:380px;background:linear-gradient(180deg, rgba(255,255,255,0.02), rgba(0,0,0,0.02));padding:14px;border-radius:12px;height:fit-content}
 .section-title{font-weight:700;margin-bottom:8px}
 .control-row{display:flex;gap:8px;flex-wrap:wrap}
 .chip{padding:8px 10px;background:rgba(255,255,255,0.02);border-radius:999px;cursor:pointer;font-size:14px;color:var(--muted);user-select:none}
@@ -34,7 +34,13 @@ hr{border:none;height:1px;background:linear-gradient(90deg,transparent,#7a00ff77
 .btn.neon{background:linear-gradient(90deg,#7a00ff,#c07dff)}
 .muted{color:var(--muted)}
 .label{font-size:13px;color:var(--muted);margin-bottom:6px}
-input[type=range]{width:140px}
+input[type=range]{width:160px}
 
 /* transform panel buttons */
 #transformPanel .btn{padding:6px 8px;font-size:13px}
+
+/* helpful small styles */
+.view-controls{display:flex;gap:6px;margin-left:12px}
+.tip{margin-left:12px;color:var(--muted);font-size:13px}
+#brushColorPicker{height:34px;width:54px;padding:0;border-radius:6px;border:none}
+#brushSizeDisplay{padding:6px 8px;background:rgba(255,255,255,0.02);border-radius:6px}
