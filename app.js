@@ -1,6 +1,9 @@
-// app.js — Fixed: proper zoom math, continuous eraser, working undo/redo for addStroke/addItem/deleteItem/erase
+// app.js — FULL updated engine: centered zoom, hand-drag pan when no tool, spacebar pan when tool selected,
+// smooth brush, eraser, items, transform panel, undo/redo, camera, save.
+// Replace your existing app.js with this file.
+
 document.addEventListener("DOMContentLoaded", () => {
-  console.log("Future Mirror Loaded (fixed engine)");
+  console.log("Future Mirror Loaded — final zoom+pan behavior");
 
   // DOM
   const uploadInput = document.getElementById("uploadImage");
@@ -46,6 +49,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const video = document.getElementById("input_video");
 
   // view transform (world <-> screen)
+  // view.scale = zoom factor applied to world
+  // view.offsetX/Y = translation in screen pixels (applied before scale)
   const view = { scale: 1.0, offsetX: 0, offsetY: 0 };
 
   // tools state
@@ -58,7 +63,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let brushSize = 18;
   let brushColor = "#DC143C";
   let brushOpacityVal = 0.6;
-  const colorPalette = ["#DC143C","#FF66B2","#FFCAA0","#8030FF","#0022FF","#FFFFFF","#000000"];
+  const colorPalette = ["#DC143C", "#FF66B2", "#FFCAA0", "#8030FF", "#0022FF", "#FFFFFF", "#000000"];
   let paletteIndex = 0;
 
   // eraser state
@@ -88,7 +93,7 @@ document.addEventListener("DOMContentLoaded", () => {
     redoBtn.disabled = redoStack.length === 0;
   }
 
-  // SUBTOOLS manifest — adjust src filenames if your assets differ
+  // SUBTOOLS manifest — update src filenames to your asset names if needed
   const SUBTOOLS = {
     makeup: [
       { id: "lip-red", label: "Lipstick Red", type: "brush", color: "#DC143C", size: 18 },
@@ -109,7 +114,8 @@ document.addEventListener("DOMContentLoaded", () => {
     ]
   };
 
-  // ---------- Coordinate transforms ----------
+  // ---------- Utility: coords transforms ----------
+  // Convert screen (clientX,clientY) to world coordinates (canvas logical coordinates that scale)
   function screenToWorld(sx, sy) {
     const rect = canvas.getBoundingClientRect();
     const cx = sx - rect.left;
@@ -119,8 +125,17 @@ document.addEventListener("DOMContentLoaded", () => {
     return { x: wx, y: wy };
   }
 
-  // ---------- drawing helpers ----------
+  // Convert world coordinates -> screen client coords (useful for positioning overlays)
+  function worldToScreen(wx, wy) {
+    const rect = canvas.getBoundingClientRect();
+    const sx = rect.left + view.offsetX + wx * view.scale;
+    const sy = rect.top + view.offsetY + wy * view.scale;
+    return { x: sx, y: sy };
+  }
+
+  // ---------- Drawing helpers ----------
   function drawImageCover(img, x, y, w, h) {
+    // Draw "cover" style inside world rectangle (0,0,w,h)
     const iw = img.width, ih = img.height;
     const r = Math.max(w / iw, h / ih);
     const nw = iw * r, nh = ih * r;
@@ -129,12 +144,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function redrawAll() {
+    // clear full canvas
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    // save and apply world transform
     ctx.save();
     ctx.translate(view.offsetX, view.offsetY);
     ctx.scale(view.scale, view.scale);
 
-    // base
+    // draw base image / video. world area size = canvas.width/view.scale, canvas.height/view.scale
     if (baseImage) {
       drawImageCover(baseImage, 0, 0, canvas.width / view.scale, canvas.height / view.scale);
     } else if (useVideo && video && video.readyState >= 2) {
@@ -144,14 +162,14 @@ document.addEventListener("DOMContentLoaded", () => {
       ctx.fillRect(0, 0, canvas.width / view.scale, canvas.height / view.scale);
     }
 
-    // strokes
+    // draw strokes (world coordinates)
     strokes.forEach(s => drawStroke(s));
     if (currentStroke) drawStroke(currentStroke);
 
-    // items
+    // draw items
     items.forEach(it => drawItem(it));
 
-    // selection
+    // selection bounding box
     if (selectedItemId) {
       const it = items.find(i => i.id === selectedItemId);
       if (it) drawSelection(it);
@@ -159,17 +177,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     ctx.restore();
 
-    // draw eraser cursor (screen-space)
+    // draw eraser cursor in screen-space if active
     if (eraserActive && lastPointerPos) {
       const rect = canvas.getBoundingClientRect();
       const sx = lastPointerPos.clientX - rect.left;
       const sy = lastPointerPos.clientY - rect.top;
       ctx.save();
-      ctx.setTransform(1,0,0,1,0,0);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.beginPath();
       ctx.strokeStyle = "rgba(255,255,255,0.6)";
       ctx.lineWidth = 1;
-      ctx.arc(sx, sy, eraserSize, 0, Math.PI*2);
+      ctx.arc(sx, sy, eraserSize, 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
     }
@@ -184,11 +202,11 @@ document.addEventListener("DOMContentLoaded", () => {
     ctx.strokeStyle = s.color;
     ctx.globalAlpha = s.opacity;
     ctx.lineWidth = s.size;
-    // smooth using quadratic curve
+    // smooth stroke with quadratic curves
     ctx.moveTo(s.points[0].x, s.points[0].y);
     for (let i = 1; i < s.points.length - 1; i++) {
-      const midx = (s.points[i].x + s.points[i+1].x) / 2;
-      const midy = (s.points[i].y + s.points[i+1].y) / 2;
+      const midx = (s.points[i].x + s.points[i + 1].x) / 2;
+      const midy = (s.points[i].y + s.points[i + 1].y) / 2;
       ctx.quadraticCurveTo(s.points[i].x, s.points[i].y, midx, midy);
     }
     if (s.points.length > 1) {
@@ -217,14 +235,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const hw = (it.w * it.scale) / 2;
     const hh = (it.h * it.scale) / 2;
     ctx.strokeStyle = "rgba(255,255,255,0.9)";
-    ctx.setLineDash([6,6]);
+    ctx.setLineDash([6, 6]);
     ctx.lineWidth = 2 / view.scale;
-    ctx.strokeRect(-hw, -hh, hw*2, hh*2);
+    ctx.strokeRect(-hw, -hh, hw * 2, hh * 2);
     ctx.setLineDash([]);
     ctx.restore();
   }
 
-  // ---------- hit tests ----------
+  // ---------- Hit tests ----------
   function pointInItemWorld(px, py, it) {
     const dx = px - it.x;
     const dy = py - it.y;
@@ -236,9 +254,9 @@ document.addEventListener("DOMContentLoaded", () => {
     return rx >= -hw && rx <= hw && ry >= -hh && ry <= hh;
   }
 
-  function uid(prefix="id") { return prefix + "-" + Math.random().toString(36).slice(2,9); }
+  function uid(prefix = "id") { return prefix + "-" + Math.random().toString(36).slice(2, 9); }
 
-  // ---------- subtools UI ----------
+  // ---------- Subtools UI ----------
   function buildSubtools(category) {
     subTools.innerHTML = "";
     const list = SUBTOOLS[category] || [];
@@ -264,6 +282,7 @@ document.addEventListener("DOMContentLoaded", () => {
           eraserActive = false;
           eraserBtn.classList.remove('active');
         }
+        updateCursor(); // update cursor when tool selected
       });
       subTools.appendChild(el);
     });
@@ -280,10 +299,11 @@ document.addEventListener("DOMContentLoaded", () => {
       activeSubtoolDef = null;
       buildSubtools(activeCategory);
       hideTransformPanel();
+      updateCursor();
     });
   });
 
-  // brush controls
+  // ---------- Brush & Controls ----------
   brushSizeVal.textContent = brushSize;
   brushSizePlus.addEventListener("click", () => { brushSize = Math.min(200, brushSize + 2); brushSizeVal.textContent = brushSize; });
   brushSizeMinus.addEventListener("click", () => { brushSize = Math.max(1, brushSize - 2); brushSizeVal.textContent = brushSize; });
@@ -293,12 +313,12 @@ document.addEventListener("DOMContentLoaded", () => {
   brushNextColor.addEventListener("click", () => { paletteIndex = (paletteIndex + 1) % colorPalette.length; brushColor = colorPalette[paletteIndex]; brushColorPicker.value = brushColor; });
 
   // eraser controls
-  eraserBtn.addEventListener("click", () => { eraserActive = !eraserActive; eraserBtn.classList.toggle('active'); });
+  eraserBtn.addEventListener("click", () => { eraserActive = !eraserActive; eraserBtn.classList.toggle('active'); updateCursor(); });
   eraserSizeVal.textContent = eraserSize;
   eraserPlus.addEventListener("click", () => { eraserSize = Math.min(400, eraserSize + 8); eraserSizeVal.textContent = eraserSize; });
   eraserMinus.addEventListener("click", () => { eraserSize = Math.max(8, eraserSize - 8); eraserSizeVal.textContent = eraserSize; });
 
-  // transform panel actions
+  // ---------- Transform panel actions ----------
   scaleSlider.addEventListener("input", () => {
     if (!selectedItemId) return;
     const it = items.find(i => i.id === selectedItemId);
@@ -346,10 +366,11 @@ document.addEventListener("DOMContentLoaded", () => {
     scaleSlider.value = it.scale;
     rotateSlider.value = it.rotation;
     selectedItemId = it.id;
+    updateCursor();
   }
-  function hideTransformPanel() { transformPanel.style.display = "none"; selectedItemId = null; }
+  function hideTransformPanel() { transformPanel.style.display = "none"; selectedItemId = null; updateCursor(); }
 
-  // place image
+  // place image item
   function placeImageAt(src, wx, wy) {
     const img = new Image();
     img.crossOrigin = "anonymous";
@@ -372,21 +393,52 @@ document.addEventListener("DOMContentLoaded", () => {
     return { id: it.id, src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, scale: it.scale, rotation: it.rotation };
   }
 
-  // ---------- pointer interactions ----------
+  // ---------- Pointer interactions + Pan behavior ----------
+  // pointerMode: 'idle' | 'pan' | 'draw' | 'dragItem' | 'erase'
   let pointerDown = false;
-  let pointerMode = "idle"; // 'pan'|'draw'|'dragItem'|'erase'|'idle'
+  let pointerMode = "idle";
   let lastPointerPos = null;
   let lastPan = { x: 0, y: 0 };
 
+  // Determine if hand-pan mode is allowed (no tool selected) OR spacebar held
+  function isHandPanAllowed() {
+    // hand-pan allowed when NO subtool is active and category is not "none"
+    // (User requested: when nothing selected in makeup/jewelry/glasses -> hand sign cursor and drag moves image)
+    // We'll treat "no activeSubtool" as nothing selected.
+    return activeSubtool === null;
+  }
+
+  // Update canvas cursor based on current mode
+  function updateCursor() {
+    if (eraserActive) {
+      canvas.style.cursor = "crosshair";
+      return;
+    }
+    if (selectedItemId) {
+      canvas.style.cursor = "move";
+      return;
+    }
+    if (isHandPanAllowed()) {
+      // show hand cursor for pan when nothing selected
+      canvas.style.cursor = "grab";
+      return;
+    }
+    // default: show crosshair for tools; if space pressed -> show grab
+    if (window.spacePressed) canvas.style.cursor = "grab"; else canvas.style.cursor = "crosshair";
+  }
+
+  // pointerdown logic: choose pan vs draw vs place vs drag
   canvas.addEventListener("pointerdown", (e) => {
     canvas.setPointerCapture(e.pointerId);
     pointerDown = true;
     lastPointerPos = { clientX: e.clientX, clientY: e.clientY };
 
-    const isPan = window.spacePressed;
-    if (isPan) {
+    const handPan = isHandPanAllowed(); // true when no subtool selected
+    const isPanMode = handPan || window.spacePressed; // either hand-pan mode OR space pressed
+    if (isPanMode) {
       pointerMode = "pan";
       lastPan.x = e.clientX; lastPan.y = e.clientY;
+      canvas.style.cursor = "grabbing";
       return;
     }
 
@@ -423,15 +475,20 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    // deselect
+    // default deselect
     selectedItemId = null;
     hideTransformPanel();
     redrawAll();
   });
 
+  // pointermove logic
   canvas.addEventListener("pointermove", (e) => {
     lastPointerPos = { clientX: e.clientX, clientY: e.clientY };
-    if (!pointerDown) return;
+    if (!pointerDown) {
+      // update cursor hover while not dragging
+      updateCursor();
+      return;
+    }
 
     if (pointerMode === "pan") {
       const dx = e.clientX - lastPan.x;
@@ -459,7 +516,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (pointerMode === "dragItem" && draggingItem) {
       draggingItem.x = world.x - dragOffset.x;
       draggingItem.y = world.y - dragOffset.y;
-      // keep transform sliders in sync
+      // sync sliders
       if (selectedItemId === draggingItem.id) {
         scaleSlider.value = draggingItem.scale;
         rotateSlider.value = draggingItem.rotation;
@@ -469,9 +526,11 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   });
 
+  // pointerup
   canvas.addEventListener("pointerup", (e) => {
     canvas.releasePointerCapture(e.pointerId);
     pointerDown = false;
+
     if (pointerMode === "draw" && currentStroke) {
       strokes.push(currentStroke);
       pushUndo({ type: 'addStroke', stroke: JSON.parse(JSON.stringify(currentStroke)) });
@@ -479,6 +538,10 @@ document.addEventListener("DOMContentLoaded", () => {
       isDrawing = false;
       redrawAll();
     }
+
+    // end pan drag cursor style
+    if (pointerMode === "pan") updateCursor();
+
     pointerMode = "idle";
     draggingItem = null;
   });
@@ -487,45 +550,70 @@ document.addEventListener("DOMContentLoaded", () => {
     pointerDown = false; pointerMode = "idle"; currentStroke = null; draggingItem = null;
   });
 
-  // ---------- wheel zoom (fixed math) ----------
+  // ---------- Wheel zoom (centered) ----------
+  // Zoom at cursor with math that keeps world point under cursor stationary.
   canvas.addEventListener("wheel", (e) => {
     e.preventDefault();
+    // zoom sensitivity
     const delta = -e.deltaY;
     const zoomFactor = delta > 0 ? 1.08 : 0.92;
+
     const rect = canvas.getBoundingClientRect();
     const cx = e.clientX - rect.left;
     const cy = e.clientY - rect.top;
-    // world point under cursor BEFORE zoom
+
+    // world point under cursor before zoom
     const wx = (cx - view.offsetX) / view.scale;
     const wy = (cy - view.offsetY) / view.scale;
-    // apply scale
+
+    // apply centered zoom: we will constrain scale and then compute new offsets so world point remains under cursor
     const newScale = Math.min(Math.max(0.2, view.scale * zoomFactor), 8);
     view.scale = newScale;
-    // after zoom, set offsets so world point stays under cursor
+
+    // compute offsets so that (wx,wy) maps back to (cx,cy)
     view.offsetX = cx - wx * view.scale;
     view.offsetY = cy - wy * view.scale;
+
     redrawAll();
   }, { passive: false });
 
-  // zoom buttons
+  // zoom buttons (zoom at canvas center)
   zoomInBtn.addEventListener("click", () => {
-    // zoom at center
     const rect = canvas.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: -120, clientX: cx, clientY: cy }));
-  });
-  zoomOutBtn.addEventListener("click", () => {
-    const rect = canvas.getBoundingClientRect();
-    const cx = rect.left + rect.width / 2;
-    const cy = rect.top + rect.height / 2;
-    canvas.dispatchEvent(new WheelEvent('wheel', { deltaY: 120, clientX: cx, clientY: cy }));
-  });
-  resetViewBtn.addEventListener("click", () => {
-    view.scale = 1; view.offsetX = 0; view.offsetY = 0; redrawAll();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    // world center before zoom
+    const wx = (cx - view.offsetX) / view.scale;
+    const wy = (cy - view.offsetY) / view.scale;
+    view.scale = Math.min(Math.max(0.2, view.scale * 1.12), 8);
+    view.offsetX = cx - wx * view.scale;
+    view.offsetY = cy - wy * view.scale;
+    redrawAll();
   });
 
-  // ---------- camera & upload ----------
+  zoomOutBtn.addEventListener("click", () => {
+    const rect = canvas.getBoundingClientRect();
+    const cx = rect.width / 2;
+    const cy = rect.height / 2;
+    const wx = (cx - view.offsetX) / view.scale;
+    const wy = (cy - view.offsetY) / view.scale;
+    view.scale = Math.min(Math.max(0.2, view.scale * 0.88), 8);
+    view.offsetX = cx - wx * view.scale;
+    view.offsetY = cy - wy * view.scale;
+    redrawAll();
+  });
+
+  resetViewBtn.addEventListener("click", () => {
+    // Reset view; keep image centered in the canvas
+    view.scale = 1;
+    // center the world origin so base image covers canvas starting at (0,0)
+    // We'll keep offset at 0 which places world origin at top-left of canvas; user can pan
+    view.offsetX = 0;
+    view.offsetY = 0;
+    redrawAll();
+  });
+
+  // ---------- Camera & Upload ----------
   startBtn.addEventListener("click", async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -547,17 +635,17 @@ document.addEventListener("DOMContentLoaded", () => {
     const img = new Image();
     img.onload = () => {
       baseImage = img; useVideo = false; if (videoStream) { videoStream.getTracks().forEach(t => t.stop()); videoStream = null; }
-      view.scale = 1; view.offsetX = 0; view.offsetY = 0; redrawAll();
+      // reset view to show image naturally (top-left anchored); user can pan with hand or space
+      view.scale = 1; view.offsetX = 0; view.offsetY = 0;
+      redrawAll();
     };
     img.src = URL.createObjectURL(f);
   });
 
-  // ---------- eraser implementation (continuous) ----------
+  // ---------- Eraser ----------
   function handleEraseAt(wx, wy) {
-    // compute world radius
     const r = eraserSize / view.scale;
     const removedStrokes = [];
-    // remove strokes with any point inside radius
     for (let i = strokes.length - 1; i >= 0; i--) {
       const s = strokes[i];
       const hit = s.points.some(p => Math.hypot(p.x - wx, p.y - wy) <= r);
@@ -569,7 +657,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const removedItems = [];
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      // approximate by center distance
       const dist = Math.hypot(it.x - wx, it.y - wy);
       if (dist <= r) {
         removedItems.push(it);
@@ -584,35 +671,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // ---------- undo / redo (working) ----------
+  // ---------- Undo / Redo ----------
   function doUndo() {
     if (undoStack.length === 0) return;
     const action = undoStack.pop();
     redoStack.push(action);
-    // handle known action types
+
     if (action.type === 'addStroke') {
-      // remove stroke with same id
       const idx = strokes.findIndex(s => s.id === action.stroke.id);
       if (idx >= 0) strokes.splice(idx, 1);
     } else if (action.type === 'addItem') {
       const idx = items.findIndex(it => it.id === action.item.id);
       if (idx >= 0) items.splice(idx, 1);
     } else if (action.type === 'deleteItem') {
-      // restore item
       items.push(rehydrateItem(action.item));
     } else if (action.type === 'erase') {
-      // restore strokes and items
       (action.strokes || []).forEach(s => strokes.push(s));
       (action.items || []).forEach(it => items.push(rehydrateItem(it)));
     } else if (action.type === 'transform') {
-      // revert transform: set to before
       const it = items.find(i => i.id === action.id);
-      if (it && action.before) {
-        it.scale = action.before.scale;
-        it.rotation = action.before.rotation;
-      }
+      if (it && action.before) { it.scale = action.before.scale; it.rotation = action.before.rotation; }
     } else if (action.type === 'reorder') {
-      // cannot perfectly restore order without full history; skip
+      // best-effort: no-op (can't reliably revert without storing previous order)
     }
     updateUndoButtons();
     redrawAll();
@@ -622,16 +702,15 @@ document.addEventListener("DOMContentLoaded", () => {
     if (redoStack.length === 0) return;
     const action = redoStack.pop();
     undoStack.push(action);
-    if (action.type === 'addStroke') {
-      strokes.push(action.stroke);
-    } else if (action.type === 'addItem') {
+
+    if (action.type === 'addStroke') strokes.push(action.stroke);
+    else if (action.type === 'addItem') {
       const it = rehydrateItem(action.item);
       items.push(it);
     } else if (action.type === 'deleteItem') {
       const idx = items.findIndex(i => i.id === action.item.id);
       if (idx >= 0) items.splice(idx, 1);
     } else if (action.type === 'erase') {
-      // reapply erase
       (action.strokes || []).forEach(s => {
         const idx = strokes.findIndex(x => x.id === s.id);
         if (idx >= 0) strokes.splice(idx, 1);
@@ -642,10 +721,7 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } else if (action.type === 'transform') {
       const it = items.find(i => i.id === action.id);
-      if (it && action.after) {
-        it.scale = action.after.scale;
-        it.rotation = action.after.rotation;
-      }
+      if (it && action.after) { it.scale = action.after.scale; it.rotation = action.after.rotation; }
     }
     updateUndoButtons();
     redrawAll();
@@ -654,15 +730,15 @@ document.addEventListener("DOMContentLoaded", () => {
   undoBtn.addEventListener("click", doUndo);
   redoBtn.addEventListener("click", doRedo);
 
-  // keyboard shortcuts
+  // keyboard shortcuts (undo/redo + space detection)
   window.addEventListener("keydown", (e) => {
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); doUndo(); }
     if ((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))) { e.preventDefault(); doRedo(); }
-    if (e.code === 'Space') { window.spacePressed = true; canvas.style.cursor = 'grab'; e.preventDefault(); }
+    if (e.code === 'Space') { window.spacePressed = true; updateCursor(); e.preventDefault(); }
   });
-  window.addEventListener("keyup", (e) => { if (e.code === 'Space') { window.spacePressed = false; canvas.style.cursor = 'crosshair'; } });
+  window.addEventListener("keyup", (e) => { if (e.code === 'Space') { window.spacePressed = false; updateCursor(); } });
 
-  // ---------- helpers ----------
+  // ---------- Helpers ----------
   function cloneItemForUndo(it) { return { id: it.id, src: it.src, x: it.x, y: it.y, w: it.w, h: it.h, scale: it.scale, rotation: it.rotation }; }
   function rehydrateItem(obj) {
     const img = new Image();
@@ -671,10 +747,10 @@ document.addEventListener("DOMContentLoaded", () => {
     return { id: obj.id, img, src: obj.src, x: obj.x, y: obj.y, w: obj.w, h: obj.h, scale: obj.scale, rotation: obj.rotation };
   }
 
-  // ---------- placeImageAt wrapper exposed for debugging ----------
-  window.__fm = { strokes, items, redrawAll, placeImageAt: (s,x,y) => placeImageAt(s,x,y) };
+  // ---------- Debug API ----------
+  window.__fm = { strokes, items, redrawAll, placeImageAt: (s, x, y) => placeImageAt(s, x, y) };
 
-  // ---------- camera & upload handlers ----------
+  // ---------- Camera & upload handlers (re-attach) ----------
   startBtn.addEventListener("click", async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
@@ -702,5 +778,6 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   // final initial draw
+  updateCursor();
   redrawAll();
 });
